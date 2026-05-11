@@ -541,9 +541,17 @@ You are examining the topic: {{TOPIC}}`;
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
+      const errCode = err.error?.code;
+      const errMsg  = err.error?.message;
       if (response.status === 401) throw new Error('Invalid API key. Check your settings.');
-      if (response.status === 429) throw new Error('Professor stepped out. Try again in a moment.');
-      throw new Error(err.error?.message || 'API call failed');
+      if (response.status === 429) {
+        if (errCode === 'insufficient_quota' || errCode === 'billing_hard_limit_reached') {
+          throw new Error('Your OpenAI account has no remaining credits. Add a payment method at platform.openai.com and try again.');
+        }
+        throw new Error('Rate limit hit. Wait a few seconds and try again.');
+      }
+      if (response.status === 403) throw new Error('Access denied — your API key may not have access to this model. Check platform.openai.com.');
+      throw new Error(errMsg || 'API call failed (' + response.status + ')');
     }
 
     const data = await response.json();
