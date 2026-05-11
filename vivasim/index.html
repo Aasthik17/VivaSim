@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VivaSim — AI Viva Examiner</title>
+  <meta name="description" content="Simulate an adversarial oral exam with Professor Verma, an AI-powered viva examiner for Indian engineering students." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f5f4f0;
+      --surface: #ffffff;
+      --border: #e0ddd6;
+      --text-primary: #1a1a1a;
+      --text-secondary: #6b6b6b;
+      --professor-bg: #f0ede8;
+      --professor-label: #8b0000;
+      --accent: #1a1a1a;
+      --accent-text: #ffffff;
+      --error: #cc0000;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .hidden { display: none !important; }
+
+    /* ── Settings Panel ── */
+    #settings-panel {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 16px;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 200ms ease, padding 200ms ease;
+      z-index: 100;
+    }
+    #settings-panel.open {
+      max-height: 160px;
+      padding: 16px;
+    }
+    #settings-panel label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: var(--text-secondary);
+    }
+    #settings-panel .settings-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    #api-key-input {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-family: inherit;
+      font-size: 14px;
+      outline: none;
+    }
+    #api-key-input:focus { border-color: var(--accent); }
+    #settings-panel .settings-note {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* ── Gear Button ── */
+    #gear-btn {
+      position: fixed;
+      top: 16px; right: 16px;
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      z-index: 101;
+      padding: 4px;
+      line-height: 1;
+    }
+    #gear-btn:hover { color: var(--text-primary); }
+
+    /* ── Shared button styles ── */
+    button {
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 16px;
+      transition: opacity 150ms;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: var(--accent-text);
+    }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-ghost {
+      background: none;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { color: var(--text-primary); border-color: var(--text-primary); }
+
+    /* ── Screen 1: Setup ── */
+    #screen-setup {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 80px 16px 24px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    #screen-setup h1 {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      letter-spacing: -0.3px;
+    }
+    #screen-setup .subtitle {
+      color: var(--text-secondary);
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+    #topic-input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-family: inherit;
+      font-size: 15px;
+      outline: none;
+      border-radius: 4px;
+      margin-bottom: 12px;
+    }
+    #topic-input:focus { border-color: var(--accent); }
+    #begin-btn { width: 100%; padding: 11px 16px; font-size: 15px; border-radius: 4px; }
+
+    /* ── Screen 2: Exam ── */
+    #screen-exam {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    #exam-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+      flex-shrink: 0;
+    }
+    #exam-topic-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+    #exam-topic-label span { color: var(--text-primary); }
+    #end-exam-btn { padding: 6px 12px; font-size: 13px; }
+
+    #conversation {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .bubble-wrap { display: flex; flex-direction: column; max-width: 85%; }
+    .bubble-wrap.professor { align-self: flex-start; align-items: flex-start; }
+    .bubble-wrap.student { align-self: flex-end; align-items: flex-end; }
+
+    .bubble-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .bubble-wrap.professor .bubble-label { color: var(--professor-label); }
+    .bubble-wrap.student .bubble-label { color: var(--text-secondary); }
+
+    .bubble {
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 15px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    .bubble-wrap.professor .bubble { background: var(--professor-bg); }
+    .bubble-wrap.student .bubble { background: var(--surface); }
+
+    /* thinking indicator */
+    #thinking-indicator {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-style: italic;
+      padding: 0 16px;
+      flex-shrink: 0;
+      min-height: 20px;
+    }
+
+    /* error */
+    #exam-error {
+      margin: 0 16px;
+      padding: 10px 12px;
+      background: #fff5f5;
+      border: 1px solid #ffcccc;
+      border-radius: 4px;
+      color: var(--error);
+      font-size: 13px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    #exam-error p { flex: 1; }
+    #exam-error button {
+      background: none;
+      border: none;
+      color: var(--error);
+      font-size: 16px;
+      padding: 0;
+      cursor: pointer;
+      line-height: 1;
+      border-radius: 0;
+    }
+
+    /* answer dock */
+    #answer-dock {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+    #answer-textarea {
+      flex: 1;
+      font-family: inherit;
+      font-size: 15px;
+      line-height: 1.6;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      resize: none;
+      min-height: 52px;
+      max-height: 200px;
+      overflow-y: auto;
+      outline: none;
+      border-radius: 4px;
+    }
+    #answer-textarea:focus { border-color: var(--accent); }
+    #answer-textarea:disabled { opacity: 0.5; }
+    #submit-btn { align-self: flex-end; padding: 9px 16px; border-radius: 4px; white-space: nowrap; }
+
+    /* ── Screen 3: Debrief ── */
+    #screen-debrief {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 16px 60px;
+      min-height: 100vh;
+    }
+    #debrief-header {
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 28px;
+    }
+    #debrief-header h2 {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.2px;
+    }
+    #debrief-header .debrief-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+    #debrief-content {
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--text-primary);
+    }
+    #debrief-content h2, #debrief-content h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-top: 24px;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+    #debrief-content ul {
+      padding-left: 20px;
+      margin: 8px 0;
+    }
+    #debrief-content li { margin-bottom: 6px; }
+    #debrief-content strong { font-weight: 600; }
+    #new-viva-btn { margin-top: 36px; }
+
+    /* ── Mobile ── */
+    @media (max-width: 480px) {
+      #screen-setup { padding-top: 60px; }
+      .bubble-wrap { max-width: 95%; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Gear icon (always visible) -->
+<button id="gear-btn" title="Settings" aria-label="Open settings">⚙</button>
+
+<!-- Settings Panel -->
+<div id="settings-panel" role="region" aria-label="API key settings">
+  <label for="api-key-input">Anthropic API Key</label>
+  <div class="settings-row">
+    <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off" spellcheck="false" />
+    <button id="save-key-btn" class="btn-primary">Save</button>
+  </div>
+  <p class="settings-note">Stored in session only. Never sent anywhere except api.anthropic.com.</p>
+</div>
+
+<!-- Screen 1: Setup -->
+<div id="screen-setup">
+  <h1>VivaSim</h1>
+  <p class="subtitle">An adversarial viva examiner. Prepare accordingly.</p>
+  <input
+    type="text"
+    id="topic-input"
+    placeholder="e.g. Binary Search Trees, Dijkstra's Algorithm, Backpropagation"
+    autocomplete="off"
+    spellcheck="false"
+  />
+  <button id="begin-btn" class="btn-primary" disabled>Begin Viva</button>
+</div>
+
+<!-- Screen 2: Exam -->
+<div id="screen-exam" class="hidden">
+  <div id="exam-header">
+    <div id="exam-topic-label">Viva in progress — <span id="exam-topic-name"></span></div>
+    <button id="end-exam-btn" class="btn-ghost">End Exam</button>
+  </div>
+  <div id="conversation" aria-live="polite" aria-label="Exam conversation"></div>
+  <p id="thinking-indicator" class="hidden">Professor is thinking…</p>
+  <div id="exam-error" class="hidden">
+    <p id="exam-error-msg"></p>
+    <button id="dismiss-error-btn" aria-label="Dismiss error">×</button>
+  </div>
+  <div id="answer-dock">
+    <textarea
+      id="answer-textarea"
+      placeholder="Type your answer…"
+      rows="3"
+    ></textarea>
+    <button id="submit-btn" class="btn-primary">Submit Answer</button>
+  </div>
+</div>
+
+<!-- Screen 3: Debrief -->
+<div id="screen-debrief" class="hidden">
+  <div id="debrief-header">
+    <p class="debrief-label">Examination complete</p>
+    <h2 id="debrief-topic-name"></h2>
+  </div>
+  <div id="debrief-content"></div>
+  <button id="new-viva-btn" class="btn-primary">Start new viva</button>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── System Prompt ──────────────────────────────────────────────────────────
+  const SYSTEM_PROMPT_TEMPLATE = `You are Professor Verma, a strict but fair examiner conducting a viva voce examination at an Indian engineering college. You have examined hundreds of students and you know every way a student bluffs their way through an answer.
+
+YOUR RULES — follow these without exception:
+
+1. NEVER explain, hint, teach, or encourage during the exam. You are evaluating understanding, not building it.
+
+2. Every follow-up question must target the VAGUEST or LEAST CONFIDENT part of the student's previous answer. If they said something hand-wavy, go exactly there.
+
+3. If the student gives a textbook-perfect answer, ESCALATE: ask for an edge case, a failure condition, a real-world implication, or the "why" behind the method.
+
+4. If the student contradicts something they said in a previous answer, call it out directly. Example: "Earlier you said X. Now you're saying Y. These cannot both be true. Which is it?"
+
+5. If the student gives a vague or evasive answer, say so plainly and ask them to be specific. Do not accept "it depends" without asking what it depends on.
+
+6. Your questions must be concise — one question at a time, 1–3 sentences maximum. No preamble, no pleasantries.
+
+7. You may ask between 8 and 12 questions total. Keep a rough count. When you have asked between 8 and 12 questions and feel you have a clear picture of the student's understanding, end the exam and produce the debrief.
+
+8. To end the exam, write exactly this keyword on its own line, then the debrief in the structured format below:
+
+DEBRIEF:
+
+**What you handled well:**
+[2–3 bullet points — specific things the student articulated correctly and with depth]
+
+**Where your understanding broke down:**
+[2–3 bullet points — specific reasoning gaps, vague answers, or incorrect claims, each with a one-sentence explanation of what the correct understanding is]
+
+**Before your real exam, go read:**
+[2–3 bullet points — specific concepts, chapters, or topics to review, based on the actual gaps observed]
+
+No scores. No grades. No encouragement. The debrief must be specific to what this student actually said, not generic.
+
+You are examining the topic: {{TOPIC}}`;
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let topic = '';
+  let conversationHistory = [];
+  let busy = false;
+
+  // ── Element refs ───────────────────────────────────────────────────────────
+  const gearBtn         = document.getElementById('gear-btn');
+  const settingsPanel   = document.getElementById('settings-panel');
+  const apiKeyInput     = document.getElementById('api-key-input');
+  const saveKeyBtn      = document.getElementById('save-key-btn');
+  const topicInput      = document.getElementById('topic-input');
+  const beginBtn        = document.getElementById('begin-btn');
+
+  const screenSetup    = document.getElementById('screen-setup');
+  const screenExam     = document.getElementById('screen-exam');
+  const screenDebrief  = document.getElementById('screen-debrief');
+
+  const examTopicName  = document.getElementById('exam-topic-name');
+  const endExamBtn     = document.getElementById('end-exam-btn');
+  const conversation   = document.getElementById('conversation');
+  const thinkingIndicator = document.getElementById('thinking-indicator');
+  const examError      = document.getElementById('exam-error');
+  const examErrorMsg   = document.getElementById('exam-error-msg');
+  const dismissErrorBtn = document.getElementById('dismiss-error-btn');
+  const answerTextarea = document.getElementById('answer-textarea');
+  const submitBtn      = document.getElementById('submit-btn');
+
+  const debriefTopicName = document.getElementById('debrief-topic-name');
+  const debriefContent   = document.getElementById('debrief-content');
+  const newVivaBtn       = document.getElementById('new-viva-btn');
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function showScreen(id) {
+    screenSetup.classList.add('hidden');
+    screenExam.classList.add('hidden');
+    screenDebrief.classList.add('hidden');
+    document.getElementById(id).classList.remove('hidden');
+  }
+
+  function checkBeginEnabled() {
+    const hasKey = !!sessionStorage.getItem('anthropic_api_key');
+    const hasTopic = topicInput.value.trim().length > 0;
+    beginBtn.disabled = !(hasKey && hasTopic);
+  }
+
+  function showError(msg) {
+    examErrorMsg.textContent = msg;
+    examError.classList.remove('hidden');
+  }
+
+  function hideError() {
+    examError.classList.add('hidden');
+    examErrorMsg.textContent = '';
+  }
+
+  function setLoading(isLoading) {
+    busy = isLoading;
+    answerTextarea.disabled = isLoading;
+    submitBtn.disabled = isLoading;
+    thinkingIndicator.classList.toggle('hidden', !isLoading);
+  }
+
+  function appendBubble(role, text) {
+    const wrap = document.createElement('div');
+    wrap.className = 'bubble-wrap ' + (role === 'assistant' ? 'professor' : 'student');
+
+    const label = document.createElement('div');
+    label.className = 'bubble-label';
+    label.textContent = role === 'assistant' ? 'Professor' : 'You';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = text;
+
+    wrap.appendChild(label);
+    wrap.appendChild(bubble);
+    conversation.appendChild(wrap);
+    conversation.scrollTop = conversation.scrollHeight;
+  }
+
+  function autoResizeTextarea() {
+    answerTextarea.style.height = 'auto';
+    answerTextarea.style.height = Math.min(answerTextarea.scrollHeight, 200) + 'px';
+  }
+
+  // ── API ────────────────────────────────────────────────────────────────────
+  async function sendToAPI(history) {
+    const apiKey = sessionStorage.getItem('anthropic_api_key');
+    const systemPrompt = SYSTEM_PROMPT_TEMPLATE.replace('{{TOPIC}}', topic);
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: history
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      if (response.status === 401) throw new Error('Invalid API key. Check your settings.');
+      if (response.status === 429) throw new Error('Professor stepped out. Try again in a moment.');
+      throw new Error(err.error?.message || 'API call failed');
+    }
+
+    const data = await response.json();
+    return data.content[0].text;
+  }
+
+  function detectDebrief(text) {
+    if (text.includes('DEBRIEF:')) {
+      return text.split('DEBRIEF:')[1].trim();
+    }
+    return null;
+  }
+
+  // ── Begin Viva ─────────────────────────────────────────────────────────────
+  async function beginViva() {
+    topic = topicInput.value.trim();
+    conversationHistory = [];
+    hideError();
+    conversation.innerHTML = '';
+    answerTextarea.value = '';
+
+    examTopicName.textContent = topic;
+    showScreen('screen-exam');
+    setLoading(true);
+
+    const initMsg = [{ role: 'user', content: 'Begin the viva.' }];
+
+    try {
+      const reply = await sendToAPI(initMsg);
+      conversationHistory.push({ role: 'user', content: 'Begin the viva.' });
+      conversationHistory.push({ role: 'assistant', content: reply });
+      appendBubble('assistant', reply);
+    } catch (e) {
+      showError(e.message || 'Connection lost. Your answers are saved — try submitting again.');
+    } finally {
+      setLoading(false);
+      answerTextarea.focus();
+    }
+  }
+
+  // ── Submit Answer ──────────────────────────────────────────────────────────
+  async function submitAnswer() {
+    const answer = answerTextarea.value.trim();
+    if (!answer || busy) return;
+
+    hideError();
+    appendBubble('user', answer);
+    conversationHistory.push({ role: 'user', content: answer });
+    answerTextarea.value = '';
+    autoResizeTextarea();
+    setLoading(true);
+
+    try {
+      const reply = await sendToAPI(conversationHistory);
+      const debriefContent = detectDebrief(reply);
+
+      if (debriefContent) {
+        showDebrief(debriefContent);
+      } else {
+        conversationHistory.push({ role: 'assistant', content: reply });
+        appendBubble('assistant', reply);
+        setLoading(false);
+        answerTextarea.focus();
+      }
+    } catch (e) {
+      // remove the optimistic user message from history so they can retry
+      conversationHistory.pop();
+      showError(e.message || 'Connection lost. Your answers are saved — try submitting again.');
+      setLoading(false);
+    }
+  }
+
+  // ── Debrief ────────────────────────────────────────────────────────────────
+  function showDebrief(content) {
+    debriefTopicName.textContent = topic;
+    debriefContent.innerHTML = marked.parse(content);
+    showScreen('screen-debrief');
+    window.scrollTo(0, 0);
+  }
+
+  // ── Reset ──────────────────────────────────────────────────────────────────
+  function resetApp() {
+    topic = '';
+    conversationHistory = [];
+    busy = false;
+    topicInput.value = '';
+    answerTextarea.value = '';
+    conversation.innerHTML = '';
+    debriefContent.innerHTML = '';
+    hideError();
+    thinkingIndicator.classList.add('hidden');
+    checkBeginEnabled();
+    showScreen('screen-setup');
+  }
+
+  // ── Event Listeners ────────────────────────────────────────────────────────
+  gearBtn.addEventListener('click', () => {
+    settingsPanel.classList.toggle('open');
+    if (settingsPanel.classList.contains('open')) {
+      apiKeyInput.focus();
+    }
+  });
+
+  saveKeyBtn.addEventListener('click', () => {
+    const val = apiKeyInput.value.trim();
+    if (val) {
+      sessionStorage.setItem('anthropic_api_key', val);
+      settingsPanel.classList.remove('open');
+      checkBeginEnabled();
+    }
+  });
+
+  apiKeyInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveKeyBtn.click();
+  });
+
+  topicInput.addEventListener('input', checkBeginEnabled);
+
+  beginBtn.addEventListener('click', beginViva);
+
+  topicInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !beginBtn.disabled) beginViva();
+  });
+
+  submitBtn.addEventListener('click', submitAnswer);
+
+  answerTextarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      e.preventDefault();
+      submitAnswer();
+    }
+  });
+
+  answerTextarea.addEventListener('input', autoResizeTextarea);
+
+  dismissErrorBtn.addEventListener('click', hideError);
+
+  endExamBtn.addEventListener('click', () => {
+    if (confirm('End the exam now? This cannot be undone.')) resetApp();
+  });
+
+  newVivaBtn.addEventListener('click', resetApp);
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  checkBeginEnabled();
+  // Pre-fill API key field if already in session
+  const storedKey = sessionStorage.getItem('anthropic_api_key');
+  if (storedKey) apiKeyInput.value = storedKey;
+
+})();
+</script>
+</body>
+</html>
